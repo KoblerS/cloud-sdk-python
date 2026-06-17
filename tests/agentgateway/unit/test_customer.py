@@ -14,7 +14,10 @@ from sap_cloud_sdk.agentgateway._customer import (
     call_mcp_tool_customer,
     _build_mcp_url,
     _CREDENTIALS_PATH_ENV,
-    _CREDENTIALS_DEFAULT_PATH,
+    _SERVICE_BINDING_ROOT_ENV,
+    _BINDING_NAME,
+    _CREDENTIALS_FILE,
+    _DEFAULT_BINDING_ROOT,
 )
 from sap_cloud_sdk.agentgateway._models import (
     CustomerCredentials,
@@ -45,48 +48,83 @@ class TestDetectCustomerAgentCredentials:
 
     def test_detect_from_env_var_path_file_not_exists(self):
         """Return None when env var path doesn't exist."""
-        with patch.dict(os.environ, {_CREDENTIALS_PATH_ENV: "/nonexistent/path"}):
-            result = detect_customer_agent_credentials()
-            assert result is None
+        with patch.dict(os.environ, {_CREDENTIALS_PATH_ENV: "/nonexistent/path"}, clear=False):
+            os.environ.pop(_SERVICE_BINDING_ROOT_ENV, None)
+            with patch("os.path.isfile", return_value=False):
+                result = detect_customer_agent_credentials()
+                assert result is None
 
-    def test_detect_from_default_path(self):
-        """Detect credentials from default mounted path."""
-        with patch.dict(os.environ, {}, clear=False):
-            # Remove env var if present
+    def test_detect_from_service_binding_root(self, tmp_path):
+        """Detect credentials via SERVICE_BINDING_ROOT/integration-credentials/credentials."""
+        binding_dir = tmp_path / _BINDING_NAME
+        binding_dir.mkdir()
+        creds_file = binding_dir / _CREDENTIALS_FILE
+        creds_file.write_text('{"clientid": "test"}')
+
+        env = {_SERVICE_BINDING_ROOT_ENV: str(tmp_path)}
+        with patch.dict(os.environ, env, clear=False):
             os.environ.pop(_CREDENTIALS_PATH_ENV, None)
+            result = detect_customer_agent_credentials()
+            assert result == str(creds_file)
+
+    def test_detect_from_default_path(self, tmp_path):
+        """Detect credentials from default Kyma path when SERVICE_BINDING_ROOT is not set."""
+        default_creds = os.path.join(_DEFAULT_BINDING_ROOT, _BINDING_NAME, _CREDENTIALS_FILE)
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(_CREDENTIALS_PATH_ENV, None)
+            os.environ.pop(_SERVICE_BINDING_ROOT_ENV, None)
 
             with patch("os.path.isfile") as mock_isfile:
-                mock_isfile.side_effect = lambda p: p == _CREDENTIALS_DEFAULT_PATH
+                mock_isfile.side_effect = lambda p: p == default_creds
 
                 result = detect_customer_agent_credentials()
-                assert result == _CREDENTIALS_DEFAULT_PATH
+                assert result == default_creds
+
+    def test_service_binding_root_takes_priority_over_default(self, tmp_path):
+        """SERVICE_BINDING_ROOT path is checked before the hardcoded /bindings fallback."""
+        sbr_dir = tmp_path / "sbr"
+        binding_dir = sbr_dir / _BINDING_NAME
+        binding_dir.mkdir(parents=True)
+        creds_file = binding_dir / _CREDENTIALS_FILE
+        creds_file.write_text('{"clientid": "sbr"}')
+
+        default_creds = os.path.join(_DEFAULT_BINDING_ROOT, _BINDING_NAME, _CREDENTIALS_FILE)
+
+        env = {_SERVICE_BINDING_ROOT_ENV: str(sbr_dir)}
+        with patch.dict(os.environ, env, clear=False):
+            os.environ.pop(_CREDENTIALS_PATH_ENV, None)
+            # Both paths exist, SERVICE_BINDING_ROOT should win
+            with patch("os.path.isfile") as mock_isfile:
+                mock_isfile.side_effect = lambda p: p in (str(creds_file), default_creds)
+
+                result = detect_customer_agent_credentials()
+                assert result == str(creds_file)
 
     def test_no_credentials_returns_none(self):
         """Return None when no credentials are found."""
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop(_CREDENTIALS_PATH_ENV, None)
+            os.environ.pop(_SERVICE_BINDING_ROOT_ENV, None)
 
             with patch("os.path.isfile", return_value=False):
                 result = detect_customer_agent_credentials()
                 assert result is None
 
-    def test_env_var_takes_priority_over_default(self, tmp_path):
-        """Env var path should take priority over default path."""
+    def test_env_var_takes_priority_over_service_binding_root(self, tmp_path):
+        """AGW_CREDENTIALS_PATH env var takes priority over SERVICE_BINDING_ROOT."""
         creds_file = tmp_path / "custom_credentials.json"
         creds_file.write_text('{"clientid": "custom"}')
 
-        with patch.dict(os.environ, {_CREDENTIALS_PATH_ENV: str(creds_file)}):
-            # Even if default path exists, env var should be used
+        sbr_creds = os.path.join(str(tmp_path), _BINDING_NAME, _CREDENTIALS_FILE)
+
+        env = {
+            _CREDENTIALS_PATH_ENV: str(creds_file),
+            _SERVICE_BINDING_ROOT_ENV: str(tmp_path),
+        }
+        with patch.dict(os.environ, env, clear=False):
             with patch("os.path.isfile") as mock_isfile:
-
-                def isfile_side_effect(path):
-                    if path == str(creds_file):
-                        return True
-                    if path == _CREDENTIALS_DEFAULT_PATH:
-                        return True
-                    return False
-
-                mock_isfile.side_effect = isfile_side_effect
+                mock_isfile.side_effect = lambda p: p in (str(creds_file), sbr_creds)
 
                 result = detect_customer_agent_credentials()
                 assert result == str(creds_file)

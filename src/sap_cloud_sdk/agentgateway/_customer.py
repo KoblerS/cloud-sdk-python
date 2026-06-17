@@ -29,11 +29,16 @@ from sap_cloud_sdk.agentgateway.exceptions import AgentGatewaySDKError
 
 logger = logging.getLogger(__name__)
 
-# Environment variable to override default credential path
+# Environment variable to override default credential path (points directly to credentials file)
 _CREDENTIALS_PATH_ENV = "AGW_CREDENTIALS_PATH"
 
-# Default credential path for Kyma production deployments
-_CREDENTIALS_DEFAULT_PATH = "/etc/ums/credentials/credentials"
+# servicebinding.io: credentials are mounted at $SERVICE_BINDING_ROOT/integration-credentials/credentials
+_SERVICE_BINDING_ROOT_ENV = "SERVICE_BINDING_ROOT"
+_BINDING_NAME = "integration-credentials"
+_CREDENTIALS_FILE = "credentials"
+
+# Kyma default when SERVICE_BINDING_ROOT is not set
+_DEFAULT_BINDING_ROOT = "/bindings"
 
 # Resource URN for Agent Gateway token scope (hardcoded - production value)
 _AGW_RESOURCE_URN = "urn:sap:identity:application:provider:name:agent-gateway"
@@ -66,24 +71,32 @@ def detect_customer_agent_credentials() -> str | None:
     """Check if customer agent credentials file exists.
 
     Checks for credential file in the following order:
-    1. Path specified in AGW_CREDENTIALS_PATH env var
-    2. Default mounted path: /etc/ums/credentials/credentials
+    1. Path specified in AGW_CREDENTIALS_PATH env var (explicit override, points to file directly)
+    2. $SERVICE_BINDING_ROOT/integration-credentials/credentials (servicebinding.io spec)
+    3. /bindings/integration-credentials/credentials (Kyma default when SERVICE_BINDING_ROOT unset)
 
     Returns:
         Path to credentials file if found, None otherwise.
     """
-    # Check env var first (path may be customized)
+    # 1. Explicit override via env var
     path_from_env = os.environ.get(_CREDENTIALS_PATH_ENV)
     if path_from_env and os.path.isfile(path_from_env):
         logger.debug("Customer credentials found at env var path: %s", path_from_env)
         return path_from_env
 
-    # Check default mounted path
-    if os.path.isfile(_CREDENTIALS_DEFAULT_PATH):
-        logger.debug(
-            "Customer credentials found at default path: %s", _CREDENTIALS_DEFAULT_PATH
-        )
-        return _CREDENTIALS_DEFAULT_PATH
+    # 2. servicebinding.io: $SERVICE_BINDING_ROOT/integration-credentials/credentials
+    sbr = os.environ.get(_SERVICE_BINDING_ROOT_ENV)
+    if sbr:
+        path = os.path.join(sbr, _BINDING_NAME, _CREDENTIALS_FILE)
+        if os.path.isfile(path):
+            logger.debug("Customer credentials found at SERVICE_BINDING_ROOT path: %s", path)
+            return path
+
+    # 3. Kyma default: /bindings/integration-credentials/credentials
+    default_path = os.path.join(_DEFAULT_BINDING_ROOT, _BINDING_NAME, _CREDENTIALS_FILE)
+    if os.path.isfile(default_path):
+        logger.debug("Customer credentials found at default path: %s", default_path)
+        return default_path
 
     return None
 
