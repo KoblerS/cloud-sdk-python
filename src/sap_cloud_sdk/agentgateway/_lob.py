@@ -23,6 +23,7 @@ from sap_cloud_sdk.destination import (
 )
 
 from sap_cloud_sdk.agentgateway._models import MCPTool
+from sap_cloud_sdk.agentgateway._mcp_session import invoke_mcp_tool
 from sap_cloud_sdk.agentgateway._token_cache import _GatewayUrlCache, _TokenCache
 from sap_cloud_sdk.agentgateway.exceptions import MCPServerNotFoundError
 
@@ -148,19 +149,7 @@ def get_ias_fragment_name(tenant_subdomain: str) -> str:
     Raises:
         MCPServerNotFoundError: If no IAS fragment is found.
     """
-    client = create_fragment_client(instance=_DESTINATION_INSTANCE)
-    fragments = client.list_instance_fragments(
-        filter=ListOptions(
-            filter_labels=[Label(key=_LABEL_KEY, values=[_IAS_LABEL_VALUE])]
-        ),
-        tenant=tenant_subdomain,
-    )
-    if not fragments:
-        raise MCPServerNotFoundError(
-            f"No IAS fragment found (label {_LABEL_KEY}={_IAS_LABEL_VALUE}) "
-            f"for tenant '{tenant_subdomain}'"
-        )
-    return fragments[0].name
+    return _get_labeled_fragment_name(tenant_subdomain, _IAS_LABEL_VALUE)
 
 
 def get_ias_user_fragment_name(tenant_subdomain: str) -> str:
@@ -178,16 +167,25 @@ def get_ias_user_fragment_name(tenant_subdomain: str) -> str:
     Raises:
         MCPServerNotFoundError: If no IAS user fragment is found.
     """
+    return _get_labeled_fragment_name(tenant_subdomain, _IAS_USER_LABEL_VALUE)
+
+
+def _get_labeled_fragment_name(tenant_subdomain: str, label_value: str) -> str:
+    """Return the name of the first fragment matching a managed-runtime label.
+
+    Raises:
+        MCPServerNotFoundError: If no matching fragment is found.
+    """
     client = create_fragment_client(instance=_DESTINATION_INSTANCE)
     fragments = client.list_instance_fragments(
         filter=ListOptions(
-            filter_labels=[Label(key=_LABEL_KEY, values=[_IAS_USER_LABEL_VALUE])]
+            filter_labels=[Label(key=_LABEL_KEY, values=[label_value])]
         ),
         tenant=tenant_subdomain,
     )
     if not fragments:
         raise MCPServerNotFoundError(
-            f"No IAS user fragment found (label {_LABEL_KEY}={_IAS_USER_LABEL_VALUE}) "
+            f"No fragment found (label {_LABEL_KEY}={label_value}) "
             f"for tenant '{tenant_subdomain}'"
         )
     return fragments[0].name
@@ -462,23 +460,4 @@ async def call_mcp_tool_lob(
     Returns:
         Tool execution result as string.
     """
-    async with httpx.AsyncClient(
-        headers={
-            "Authorization": f"Bearer {user_auth_token}",
-            "x-correlation-id": str(uuid.uuid4()),
-        },
-        timeout=timeout,
-    ) as http_client:
-        async with streamable_http_client(tool.url, http_client=http_client) as (
-            read,
-            write,
-            _,
-        ):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(tool.name, kwargs)
-                if not result.content:
-                    logger.warning("Tool '%s' returned empty content", tool.name)
-                    return ""
-                first = result.content[0]
-                return str(getattr(first, "text", ""))
+    return await invoke_mcp_tool(tool, user_auth_token, timeout, **kwargs)

@@ -259,7 +259,7 @@ class TestGetIasFragmentName:
         ) as mock_client:
             mock_client.return_value.list_instance_fragments.return_value = []
 
-            with pytest.raises(MCPServerNotFoundError, match="No IAS fragment found"):
+            with pytest.raises(MCPServerNotFoundError, match="No fragment found"):
                 get_ias_fragment_name("tenant-sub")
 
 
@@ -305,7 +305,7 @@ class TestGetIasUserFragmentName:
         with patch("sap_cloud_sdk.agentgateway._lob.create_fragment_client") as mock_client:
             mock_client.return_value.list_instance_fragments.return_value = []
 
-            with pytest.raises(MCPServerNotFoundError, match="No IAS user fragment found"):
+            with pytest.raises(MCPServerNotFoundError, match="No fragment found"):
                 get_ias_user_fragment_name("tenant-sub")
 
 
@@ -607,15 +607,16 @@ class TestCallMcpToolLob:
         )
 
         mock_result = MagicMock()
+        mock_result.isError = False
         mock_result.content = [MagicMock()]
         mock_result.content[0].text = "Tool result"
 
         with (
-            patch("sap_cloud_sdk.agentgateway._lob.httpx.AsyncClient") as mock_http,
+            patch("sap_cloud_sdk.agentgateway._mcp_session.httpx.AsyncClient") as mock_http,
             patch(
-                "sap_cloud_sdk.agentgateway._lob.streamable_http_client"
+                "sap_cloud_sdk.agentgateway._mcp_session.streamable_http_client"
             ) as mock_stream,
-            patch("sap_cloud_sdk.agentgateway._lob.ClientSession") as mock_session,
+            patch("sap_cloud_sdk.agentgateway._mcp_session.ClientSession") as mock_session,
         ):
             # Setup async context managers
             mock_http_instance = AsyncMock()
@@ -659,14 +660,15 @@ class TestCallMcpToolLob:
         )
 
         mock_result = MagicMock()
+        mock_result.isError = False
         mock_result.content = []
 
         with (
-            patch("sap_cloud_sdk.agentgateway._lob.httpx.AsyncClient") as mock_http,
+            patch("sap_cloud_sdk.agentgateway._mcp_session.httpx.AsyncClient") as mock_http,
             patch(
-                "sap_cloud_sdk.agentgateway._lob.streamable_http_client"
+                "sap_cloud_sdk.agentgateway._mcp_session.streamable_http_client"
             ) as mock_stream,
-            patch("sap_cloud_sdk.agentgateway._lob.ClientSession") as mock_session,
+            patch("sap_cloud_sdk.agentgateway._mcp_session.ClientSession") as mock_session,
         ):
             mock_http_instance = AsyncMock()
             mock_http.return_value.__aenter__.return_value = mock_http_instance

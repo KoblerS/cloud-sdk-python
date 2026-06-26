@@ -361,7 +361,6 @@ class AgentGatewayClient:
             )
 
         except AgentGatewaySDKError:
-            # Re-raise SDK errors as-is
             raise
         except Exception as e:
             logger.exception("Unexpected error during tool discovery")

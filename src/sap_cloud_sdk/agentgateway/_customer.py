@@ -24,6 +24,7 @@ from sap_cloud_sdk.agentgateway._models import (
     IntegrationDependency,
     MCPTool,
 )
+from sap_cloud_sdk.agentgateway._mcp_session import invoke_mcp_tool
 from sap_cloud_sdk.agentgateway._token_cache import _TokenCache
 from sap_cloud_sdk.agentgateway.exceptions import AgentGatewaySDKError
 
@@ -64,6 +65,7 @@ class _CredentialFields:
     GATEWAY_URL = "gatewayUrl"
     INTEGRATION_DEPENDENCIES = "integrationDependencies"
     ORD_ID = "ordId"
+    DATA = "data"
     GLOBAL_TENANT_ID = "globalTenantId"
 
 
@@ -151,7 +153,10 @@ def load_customer_credentials(path: str) -> CustomerCredentials:
         integration_deps = [
             IntegrationDependency(
                 ord_id=dep[_CredentialFields.ORD_ID],
-                global_tenant_id=dep[_CredentialFields.GLOBAL_TENANT_ID],
+                global_tenant_id=(
+                    dep.get(_CredentialFields.GLOBAL_TENANT_ID)
+                    or dep[_CredentialFields.DATA][_CredentialFields.GLOBAL_TENANT_ID]
+                ),
             )
             for dep in data[_CredentialFields.INTEGRATION_DEPENDENCIES]
         ]
@@ -255,11 +260,6 @@ def _request_token_mtls(
         "grant_type": grant_type,
         "resource": _AGW_RESOURCE_URN,
     }
-
-    # TODO: app_tid requirement is still being clarified with the IBD team.
-    # This parameter may be removed if it turns out to be unnecessary.
-    if app_tid:
-        data["app_tid"] = app_tid
 
     if extra_data:
         data.update(extra_data)
@@ -565,26 +565,4 @@ async def call_mcp_tool_customer(
         Tool execution result as string.
     """
     logger.info("Calling tool '%s' on server '%s'", tool.name, tool.server_name)
-
-    async with httpx.AsyncClient(
-        headers={
-            "Authorization": f"Bearer {auth_token}",
-            "x-correlation-id": str(uuid.uuid4()),
-        },
-        timeout=timeout,
-    ) as http_client:
-        async with streamable_http_client(tool.url, http_client=http_client) as (
-            read,
-            write,
-            _,
-        ):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(tool.name, kwargs)
-
-                if not result.content:
-                    logger.warning("Tool '%s' returned empty content", tool.name)
-                    return ""
-
-                first = result.content[0]
-                return str(getattr(first, "text", ""))
+    return await invoke_mcp_tool(tool, auth_token, timeout, **kwargs)
