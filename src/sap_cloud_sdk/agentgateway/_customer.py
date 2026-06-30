@@ -235,7 +235,6 @@ def _request_token_mtls(
     credentials: CustomerCredentials,
     grant_type: str,
     timeout: float,
-    app_tid: str | None = None,
     extra_data: dict | None = None,
 ) -> dict:
     """Make mTLS token request to IAS.
@@ -244,7 +243,6 @@ def _request_token_mtls(
         credentials: Customer credentials with certificate and private key.
         grant_type: OAuth2 grant type.
         timeout: HTTP timeout in seconds.
-        app_tid: BTP Application Tenant ID of subscriber (optional).
         extra_data: Additional form data for the token request.
 
     Returns:
@@ -340,7 +338,6 @@ def get_system_token_mtls(
         credentials,
         grant_type=_GRANT_TYPE_CLIENT_CREDENTIALS,
         timeout=timeout,
-        app_tid=app_tid,
         extra_data={"response_type": "token"},
     )
     access_token = token_data["access_token"]
@@ -386,15 +383,17 @@ def exchange_user_token(
             return cached_token
 
     logger.info("Exchanging user token for AGW-scoped token via jwt-bearer grant")
+    extra: dict = {
+        "assertion": user_token,
+        "token_format": "jwt",
+    }
+    if app_tid:
+        extra["app_tid"] = app_tid
     token_data = _request_token_mtls(
         credentials,
         grant_type=_GRANT_TYPE_JWT_BEARER,
         timeout=timeout,
-        app_tid=app_tid,
-        extra_data={
-            "assertion": user_token,
-            "token_format": "jwt",
-        },
+        extra_data=extra,
     )
     access_token = token_data["access_token"]
 

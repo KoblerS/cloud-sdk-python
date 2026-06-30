@@ -1,5 +1,6 @@
 """Shared helpers for MCP session management."""
 
+import logging
 import uuid
 
 import httpx
@@ -8,6 +9,8 @@ from mcp.client.streamable_http import streamable_http_client
 
 from sap_cloud_sdk.agentgateway._models import MCPTool
 from sap_cloud_sdk.agentgateway.exceptions import AgentGatewayServerError
+
+logger = logging.getLogger(__name__)
 
 
 async def invoke_mcp_tool(tool: MCPTool, auth_token: str, timeout: float, **kwargs) -> str:
@@ -35,33 +38,50 @@ async def invoke_mcp_tool(tool: MCPTool, auth_token: str, timeout: float, **kwar
         },
         timeout=timeout,
     ) as http_client:
-        async with streamable_http_client(tool.url, http_client=http_client) as (
-            read,
-            write,
-            _,
-        ):
-            async with ClientSession(read, write) as session:
-                try:
-                    await session.initialize()
-                except McpError as e:
-                    raise AgentGatewayServerError(
-                        f"Agent Gateway rejected MCP session for tool '{tool.name}': {e.error.message}",
-                        error_code=e.error.code,
-                    ) from e
-                try:
-                    result = await session.call_tool(tool.name, kwargs)
-                except McpError as e:
-                    raise AgentGatewayServerError(
-                        f"Agent Gateway returned error for tool '{tool.name}': {e.error.message}",
-                        error_code=e.error.code,
-                    ) from e
-                if result.isError:
-                    raise AgentGatewayServerError(
-                        f"Tool '{tool.name}' returned an error: {_error_text(result.content)}"
-                    )
-                if not result.content:
-                    return ""
-                return str(getattr(result.content[0], "text", ""))
+        try:
+            async with streamable_http_client(tool.url, http_client=http_client) as (
+                read,
+                write,
+                _,
+            ):
+                async with ClientSession(read, write) as session:
+                    try:
+                        await session.initialize()
+                    except McpError as e:
+                        raise AgentGatewayServerError(
+                            f"Agent Gateway rejected MCP session for tool '{tool.name}': {e.error.message}",
+                            error_code=e.error.code,
+                        ) from e
+                    try:
+                        result = await session.call_tool(tool.name, kwargs)
+                    except McpError as e:
+                        raise AgentGatewayServerError(
+                            f"Agent Gateway returned error for tool '{tool.name}': {e.error.message}",
+                            error_code=e.error.code,
+                        ) from e
+                    if result is None:
+                        logger.warning("Tool '%s' returned a null result", tool.name)
+                        return ""
+                    if result.isError:
+                        raise AgentGatewayServerError(
+                            f"Tool '{tool.name}' returned an error: {_error_text(result.content)}"
+                        )
+                    if not result.content:
+                        return ""
+                    return str(getattr(result.content[0], "text", ""))
+        except BaseExceptionGroup as eg:
+            # anyio wraps task-group exceptions into ExceptionGroups. If the only
+            # leaf exception is AttributeError it means an older MCP library version
+            # crashed on a null result body inside call_tool. Re-raise anything else.
+            attr_errors, rest = eg.split(AttributeError)
+            if rest is not None:
+                raise
+            logger.warning(
+                "Tool '%s' returned a null result (MCP null-result bug: %s)",
+                tool.name,
+                attr_errors,
+            )
+            return ""
 
 
 def _error_text(content: list) -> str:

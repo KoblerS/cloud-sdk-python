@@ -816,6 +816,66 @@ class TestCallMcpToolCustomer:
             assert result == ""
 
     @pytest.mark.asyncio
+    async def test_returns_empty_string_when_result_is_none(self, mock_tool):
+        """Return empty string when call_tool returns None (null MCP response)."""
+        with (
+            patch("sap_cloud_sdk.agentgateway._mcp_session.httpx.AsyncClient") as mock_client_class,
+            patch("sap_cloud_sdk.agentgateway._mcp_session.streamable_http_client") as mock_stream,
+            patch("sap_cloud_sdk.agentgateway._mcp_session.ClientSession") as mock_session_class,
+        ):
+            mock_client = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client_class.return_value = mock_client
+
+            mock_stream_ctx = AsyncMock()
+            mock_stream_ctx.__aenter__ = AsyncMock(return_value=(AsyncMock(), AsyncMock(), None))
+            mock_stream_ctx.__aexit__ = AsyncMock(return_value=None)
+            mock_stream.return_value = mock_stream_ctx
+
+            mock_session = AsyncMock()
+            mock_session.initialize = AsyncMock()
+            mock_session.call_tool = AsyncMock(return_value=None)
+            mock_session_ctx = AsyncMock()
+            mock_session_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_ctx.__aexit__ = AsyncMock(return_value=None)
+            mock_session_class.return_value = mock_session_ctx
+
+            result = await call_mcp_tool_customer(mock_tool, "auth-token", 60.0)
+            assert result == ""
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_string_when_exception_group_contains_only_attr_error(self, mock_tool):
+        """Return empty string when anyio wraps an AttributeError (older MCP null-result bug) in an ExceptionGroup."""
+        with (
+            patch("sap_cloud_sdk.agentgateway._mcp_session.httpx.AsyncClient") as mock_client_class,
+            patch("sap_cloud_sdk.agentgateway._mcp_session.streamable_http_client") as mock_stream,
+            patch("sap_cloud_sdk.agentgateway._mcp_session.ClientSession") as mock_session_class,
+        ):
+            mock_client = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client_class.return_value = mock_client
+
+            # Simulate anyio wrapping the AttributeError in a BaseExceptionGroup
+            nested = BaseExceptionGroup(
+                "unhandled errors in a TaskGroup",
+                [BaseExceptionGroup(
+                    "unhandled errors in a TaskGroup",
+                    [AttributeError("'NoneType' object has no attribute 'isError'")],
+                )],
+            )
+            mock_stream_ctx = AsyncMock()
+            mock_stream_ctx.__aenter__ = AsyncMock(return_value=(AsyncMock(), AsyncMock(), None))
+            mock_stream_ctx.__aexit__ = AsyncMock(side_effect=nested)
+            mock_stream.return_value = mock_stream_ctx
+
+            mock_session_class.return_value = AsyncMock()
+
+            result = await call_mcp_tool_customer(mock_tool, "auth-token", 60.0)
+            assert result == ""
+
+    @pytest.mark.asyncio
     async def test_raises_server_error_when_result_is_error(self, mock_tool):
         """Raise AgentGatewayServerError when tool result has isError=True."""
         with (
