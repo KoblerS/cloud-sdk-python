@@ -521,7 +521,7 @@ class TestListMcpTools:
             await agw_client.list_mcp_tools(app_tid="tid")
 
             mock_customer.assert_called_once_with(
-                mock_creds, "customer-system-token", 60.0
+                mock_creds, "customer-system-token", 60.0, ord_id=None
             )
 
     @pytest.mark.asyncio
@@ -575,7 +575,7 @@ class TestListMcpTools:
             await agw_client.list_mcp_tools(user_token="user-jwt", app_tid="tid")
 
             mock_customer.assert_called_once_with(
-                mock_creds, "exchanged-user-token", 60.0
+                mock_creds, "exchanged-user-token", 60.0, ord_id=None
             )
 
 
