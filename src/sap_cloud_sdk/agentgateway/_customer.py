@@ -581,3 +581,49 @@ async def get_mcp_tools_customer(
         "Loaded %d MCP tool(s) from %d server(s)", len(tools), len(dependencies)
     )
     return tools
+
+
+async def call_mcp_tool_customer(
+    tool: MCPTool,
+    auth_token: str,
+    timeout: float,
+    **kwargs,
+) -> str:
+    """Invoke an MCP tool using customer flow.
+
+    Uses a pre-fetched token (either user-scoped or system-scoped) for
+    authentication against the MCP server.
+
+    Args:
+        tool: MCPTool to invoke.
+        auth_token: Pre-fetched raw access token for authentication.
+        timeout: HTTP timeout in seconds for the MCP server call.
+        **kwargs: Tool input parameters.
+
+    Returns:
+        Tool execution result as string.
+    """
+    logger.info("Calling tool '%s' on server '%s'", tool.name, tool.server_name)
+
+    async with httpx.AsyncClient(
+        headers={
+            "Authorization": f"Bearer {auth_token}",
+            "x-correlation-id": str(uuid.uuid4()),
+        },
+        timeout=timeout,
+    ) as http_client:
+        async with streamable_http_client(tool.url, http_client=http_client) as (
+            read,
+            write,
+            _,
+        ):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.call_tool(tool.name, kwargs)
+
+                if not result.content:
+                    logger.warning("Tool '%s' returned empty content", tool.name)
+                    return ""
+
+                first = result.content[0]
+                return str(getattr(first, "text", ""))
