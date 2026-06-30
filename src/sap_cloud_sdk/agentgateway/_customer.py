@@ -99,7 +99,10 @@ def detect_customer_agent_credentials() -> str | None:
                     continue
             credentials_path = os.path.join(entry.path, _CREDENTIALS_FILE)
             if os.path.isfile(credentials_path):
-                logger.debug("Customer credentials found via servicebinding.io type scan: %s", credentials_path)
+                logger.debug(
+                    "Customer credentials found via servicebinding.io type scan: %s",
+                    credentials_path,
+                )
                 return credentials_path
 
     return None

@@ -521,7 +521,9 @@ class AgentGatewayClient:
                 )
 
                 if isinstance(tool, str):
-                    tool = await self._resolve_tool_by_name(tool, ord_id, user_token, app_tid)
+                    tool = await self._resolve_tool_by_name(
+                        tool, ord_id, user_token, app_tid
+                    )
 
                 # Resolve user_token if provided (optional for customer flow)
                 if user_token:
@@ -545,7 +547,9 @@ class AgentGatewayClient:
                 logger.warning("app_tid parameter ignored for LoB agent flow")
 
             if isinstance(tool, str):
-                tool = await self._resolve_tool_by_name(tool, ord_id, user_token, app_tid)
+                tool = await self._resolve_tool_by_name(
+                    tool, ord_id, user_token, app_tid
+                )
 
             auth = await self.get_user_auth(user_token, app_tid)
             return await call_mcp_tool_lob(
@@ -584,7 +588,9 @@ class AgentGatewayClient:
         Raises:
             AgentGatewaySDKError: If no tool with that name is found.
         """
-        tools = await self.list_mcp_tools(user_token=user_token, app_tid=app_tid, ord_id=ord_id)
+        tools = await self.list_mcp_tools(
+            user_token=user_token, app_tid=app_tid, ord_id=ord_id
+        )
         match = next((t for t in tools if t.name == tool_name), None)
         if match is None:
             available = ", ".join(t.name for t in tools[:10])

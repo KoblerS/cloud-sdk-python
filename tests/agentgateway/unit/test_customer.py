@@ -14,7 +14,6 @@ from sap_cloud_sdk.agentgateway._customer import (
     _build_mcp_url,
     _resolve_dependency,
     _CREDENTIALS_PATH_ENV,
-    _SERVICE_BINDING_ROOT_ENV,
     _BINDING_TYPE,
     _BINDING_TYPE_FILE,
     _CREDENTIALS_FILE,
@@ -59,7 +58,7 @@ class TestDetectCustomerAgentCredentials:
 
     def test_detect_from_env_var_path_file_not_exists(self, tmp_path):
         """Return None when env var path doesn't exist."""
-        env = {_CREDENTIALS_PATH_ENV: "/nonexistent/path", _SERVICE_BINDING_ROOT_ENV: str(tmp_path)}
+        env = {_CREDENTIALS_PATH_ENV: "/nonexistent/path", "SERVICE_BINDING_ROOT": str(tmp_path)}
         with patch.dict(os.environ, env, clear=False):
             result = detect_customer_agent_credentials()
             assert result is None
@@ -68,7 +67,7 @@ class TestDetectCustomerAgentCredentials:
         """Detect credentials by scanning SERVICE_BINDING_ROOT for a binding with matching type file."""
         creds_file = self._make_binding(tmp_path)
 
-        env = {_SERVICE_BINDING_ROOT_ENV: str(tmp_path)}
+        env = {"SERVICE_BINDING_ROOT": str(tmp_path)}
         with patch.dict(os.environ, env, clear=False):
             os.environ.pop(_CREDENTIALS_PATH_ENV, None)
             result = detect_customer_agent_credentials()
@@ -80,7 +79,7 @@ class TestDetectCustomerAgentCredentials:
 
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop(_CREDENTIALS_PATH_ENV, None)
-            os.environ.pop(_SERVICE_BINDING_ROOT_ENV, None)
+            os.environ.pop("SERVICE_BINDING_ROOT", None)
             with patch("sap_cloud_sdk.agentgateway._customer._DEFAULT_BINDING_ROOT", str(tmp_path)):
                 result = detect_customer_agent_credentials()
                 assert result == str(creds_file)
@@ -92,7 +91,7 @@ class TestDetectCustomerAgentCredentials:
         (wrong_dir / _BINDING_TYPE_FILE).write_text("something-else")
         (wrong_dir / _CREDENTIALS_FILE).write_text('{"clientid": "wrong"}')
 
-        env = {_SERVICE_BINDING_ROOT_ENV: str(tmp_path)}
+        env = {"SERVICE_BINDING_ROOT": str(tmp_path)}
         with patch.dict(os.environ, env, clear=False):
             os.environ.pop(_CREDENTIALS_PATH_ENV, None)
             result = detect_customer_agent_credentials()
@@ -104,14 +103,14 @@ class TestDetectCustomerAgentCredentials:
         sbr_dir.mkdir()
         creds_file = self._make_binding(sbr_dir)
 
-        with patch.dict(os.environ, {_SERVICE_BINDING_ROOT_ENV: str(sbr_dir)}, clear=False):
+        with patch.dict(os.environ, {"SERVICE_BINDING_ROOT": str(sbr_dir)}, clear=False):
             os.environ.pop(_CREDENTIALS_PATH_ENV, None)
             result = detect_customer_agent_credentials()
             assert result == str(creds_file)
 
     def test_no_credentials_returns_none(self, tmp_path):
         """Return None when no binding with matching type is found."""
-        env = {_SERVICE_BINDING_ROOT_ENV: str(tmp_path)}
+        env = {"SERVICE_BINDING_ROOT": str(tmp_path)}
         with patch.dict(os.environ, env, clear=False):
             os.environ.pop(_CREDENTIALS_PATH_ENV, None)
             result = detect_customer_agent_credentials()
@@ -128,7 +127,7 @@ class TestDetectCustomerAgentCredentials:
 
         env = {
             _CREDENTIALS_PATH_ENV: str(creds_file),
-            _SERVICE_BINDING_ROOT_ENV: str(sbr_dir),
+            "SERVICE_BINDING_ROOT": str(sbr_dir),
         }
         with patch.dict(os.environ, env, clear=False):
             result = detect_customer_agent_credentials()

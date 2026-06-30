@@ -13,7 +13,9 @@ from sap_cloud_sdk.agentgateway.exceptions import AgentGatewayServerError
 logger = logging.getLogger(__name__)
 
 
-async def invoke_mcp_tool(tool: MCPTool, auth_token: str, timeout: float, **kwargs) -> str:
+async def invoke_mcp_tool(
+    tool: MCPTool, auth_token: str, timeout: float, **kwargs
+) -> str:
     """Open an MCP session, call a tool, and return its text result.
 
     Handles McpError from both initialize() and call_tool(), and checks
